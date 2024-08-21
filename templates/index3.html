@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+            width: 90vw;
+            background: #1e1e1e;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        #chat-box {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            word-wrap: break-word;
+        }
+        .message {
+            margin: 10px 0;
+            color: #ffffff;
+        }
+        .user {
+            text-align: left;
+        }
+        .assistant {
+            text-align: left;
+        }
+        pre {
+            background: #333;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            background: #444;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid #444;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        #input-container {
+            display: flex;
+            padding: 10px;
+            background: #2c2c2c;
+            align-items: center;
+        }
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            margin-right: 10px;
+            background: #2c2c2c;
+            color: #ffffff;
+            resize: none;
+            height: 50px;
+            max-height: 150px;
+            word-break: break-word;
+            overflow-y: auto;
+        }
+        #send-button, #stop-button, #execute-button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+        #send-button:hover, #stop-button:hover, #execute-button:hover {
+            background: #0056b3;
+        }
+        .markdown-body {
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="chat-box" class="markdown-body"></div>
+        <div id="input-container">
+            <textarea id="user-input" placeholder="Type your message here..."></textarea>
+            <button id="send-button">Send</button>
+            <button id="stop-button">Stop</button>
+            <button id="execute-button">Execute Code</button>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.3.4/purify.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const socket = io();
+
+            const chatBox = document.getElementById('chat-box');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+            const stopButton = document.getElementById('stop-button');
+            const executeButton = document.getElementById('execute-button');
+
+            let assistantMessageBuffer = '';
+            let assistantMessageElement;
+
+            socket.on('response', (msg) => {
+                console.log("Response received:", msg);  // Debug print
+                if (!assistantMessageElement) {
+                    assistantMessageElement = document.createElement('div');
+                    assistantMessageElement.className = 'message assistant';
+                    assistantMessageElement.innerHTML = '🤖: <span></span>';
+                    chatBox.appendChild(assistantMessageElement);
+                }
+                assistantMessageBuffer += msg.content;
+                const contentSpan = assistantMessageElement.querySelector('span');
+                const parsedContent = marked.parse(assistantMessageBuffer);
+                const sanitizedContent = DOMPurify.sanitize(parsedContent);
+                contentSpan.innerHTML = sanitizedContent;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+
+            function sendMessage() {
+                const message = userInput.value;
+                if (message) {
+                    const userMessageElement = document.createElement('div');
+                    userMessageElement.className = 'message user';
+                    userMessageElement.innerHTML = '👤: ' + message;
+                    chatBox.appendChild(userMessageElement);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                    socket.send(message);
+                    userInput.value = '';
+                    assistantMessageBuffer = '';  // Reset the buffer for the next assistant message
+                    assistantMessageElement = null;  // Reset for the next assistant message
+                    console.log("Message sent:", message);
+                }
+            }
+
+            function stopMessage() {
+                socket.emit('stop');
+                console.log("Stop message sent");
+            }
+
+            function executeCode() {
+                const code = userInput.value;
+                if (code) {
+                    const userMessageElement = document.createElement('div');
+                    userMessageElement.className = 'message user';
+                    userMessageElement.innerHTML = '👤: <pre>' + code + '</pre>';
+                    chatBox.appendChild(userMessageElement);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                    socket.emit('execute_code', code);
+                    userInput.value = '';
+                    assistantMessageBuffer = '';  // Reset the buffer for the next assistant message
+                    assistantMessageElement = null;  // Reset for the next assistant message
+                    console.log("Code executed:", code);
+                }
+            }
+
+            sendButton.addEventListener('click', sendMessage);
+            userInput.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    sendMessage();
+                }
+            });
+            stopButton.addEventListener('click', stopMessage);
+            executeButton.addEventListener('click', executeCode);
+        });
+    </script>
+</body>
+</html>
